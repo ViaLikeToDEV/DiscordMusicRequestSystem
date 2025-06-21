@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎵 Discord Music Request System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="/script.js" defer></script>
+</head>
+<body class="bg-gray-100 font-sans text-gray-800">
+    <div class="container mx-auto p-4 max-w-4xl">
+        <h1 class="text-2xl font-bold mb-4 text-center">🎵 Discord Music Request System</h1>
+        <p class="text-center mb-8">ระบบเล่นเพลงสำหรับงานอีเวนต์ที่เชื่อมต่อกับ Discord</p>
+
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">🎵 กำลังเล่น</h2>
+            <div id="current-song" class="mb-4">
+                <div>ยังไม่มีเพลงที่กำลังเล่น</div>
+                <div class="text-sm text-gray-600">กรุณาเพิ่มเพลงลงในคิว</div>
+            </div>
+            <div class="flex space-x-4">
+                <button id="play-pause-btn" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">▶️ เล่น</button>
+                <button id="skip-btn" class="bg-yellow-500 text-white px-4 py-2 rounded hover:bg-yellow-600">⏭️ ข้าม</button>
+                <button id="stop-btn" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600">⏹️ หยุด</button>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">📊 สถานะระบบ</h2>
+            <p id="server-status">เซิร์ฟเวอร์: ออนไลน์</p>
+            <p>Discord Webhook: เชื่อมต่อแล้ว</p>
+            <p>yt-dlp: พร้อมใช้งาน</p>
+            <p id="queue-count">🎵 เพลงในคิว: 0 เพลง</p>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">📋 คิวเพลง</h2>
+            <ul id="queue-list" class="list-decimal pl-6">
+                <li class="py-2">ไม่มีเพลงในคิว</li>
+            </ul>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">🎶 เพิ่มเพลงด้วยตนเอง</h2>
+            <form id="add-song-form" class="flex space-x-4">
+                <input id="song-url" type="text" placeholder="YouTube URL" class="flex-1 p-2 border rounded">
+                <button type="submit" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">➕ เพิ่มเพลง</button>
+            </form>
+        </div>
+
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h2 class="text-xl font-semibold mb-4">📝 คำสั่ง Discord</h2>
+            <ul class="list-disc pl-6">
+                <li class="py-1">!play [URL/ชื่อเพลง] - เพิ่มเพลงเข้าคิว</li>
+                <li class="py-1">!skip - ข้ามเพลงปัจจุบัน</li>
+                <li class="py-1">!np - แสดงเพลงที่กำลังเล่นและคิว</li>
+                <li class="py-1">!stop - หยุดเล่นเพลงและล้างคิว</li>
+            </ul>
+        </div>
+
+        <p class="text-center mt-8 text-gray-600">[INFO] ระบบพร้อมใช้งาน - รอคำสั่งจาก Discord</p>
+    </div>
+</body>
+</html>
