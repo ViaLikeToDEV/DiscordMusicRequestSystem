@@ -1,0 +1,18 @@
+{
+  "discord": {
+    "token": "DISCORD_BOT_TOKEN_HERE",
+    "command_prefix": "!"
+  },
+  "server": {
+    "host": "localhost",
+    "port": 8000
+  },
+  "music": {
+    "download_folder": "./downloads",
+    "max_preload": 20,
+    "default_volume": 50
+  },
+  "youtube": {
+    "quality": "bestaudio/best"
+  }
+}
