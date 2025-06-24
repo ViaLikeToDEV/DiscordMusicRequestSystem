@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Player</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+</head>
+<body>
+    <div id="interaction-overlay" style="position:fixed;z-index:9999;top:0;left:0;width:100vw;height:100vh;background:#fff;display:flex;align-items:center;justify-content:center;">
+      <button id="start-btn" style="font-size:2rem;padding:1em 2em;">คลิกเพื่อเริ่มใช้งาน</button>
+    </div>
+    <h1>🎵 Music Player Control Panel</h1>
+    
+    <!-- Current Song Display -->
+    <div id="current-song">
+        <h2>กำลังเล่น:</h2>
+        <div id="now-playing">ไม่มีเพลงที่กำลังเล่น</div>
+        <audio id="audio-player" controls style="width: 100%; margin: 10px 0;"></audio>
+    </div>
+    
+    <!-- Controls -->
+    <div id="controls">
+        <button onclick="skipSong()">⏭️ Skip</button>
+        <button onclick="pauseSong()">⏸️ Pause</button>
+        <button onclick="resumeSong()">▶️ Resume</button>
+        <br><br>
+        <label for="volume-slider">🔊 Volume: </label>
+        <input type="range" id="volume-slider" min="0" max="100" value="50" onchange="setVolume(this.value)">
+        <span id="volume-display">50%</span>
+    </div>
+    
+    <!-- Add Song Form -->
+    <div id="add-song-form">
+        <h3>เพิ่มเพลง:</h3>
+        <input type="text" id="youtube-url" placeholder="ใส่ YouTube URL ที่นี่" style="width: 400px;">
+        <button onclick="addSong()">➕ Add Song</button>
+    </div>
+    
+    <!-- Queue Display -->
+    <div id="queue-section">
+        <h3>คิวเพลง:</h3>
+        <div id="queue-list">ไม่มีเพลงในคิว</div>
+    </div>
+    
+    <!-- Status Messages -->
+    <div id="messages" style="margin-top: 20px; padding: 10px; border: 1px solid #ccc; min-height: 100px; max-height: 200px; overflow-y: auto;">
+        <h4>สถานะ:</h4>
+        <div id="status-messages"></div>
+    </div>
+
+    <script>
+        // Initialize Socket.IO
+        const socket = io();
+        
+        // Audio player element
+        const audioPlayer = document.getElementById('audio-player');
+        let currentSongId = null;
+        
+        // Socket event listeners
+        socket.on('connect', function() {
+            addStatusMessage('🟢 เชื่อมต่อกับเซิร์ฟเวอร์แล้ว');
+        });
+        
+        socket.on('status_updated', function(data) {
+            updateStatus(data);
+        });
+        
+        socket.on('queue_updated', function(data) {
+            updateStatus(data);
+        });
+        
+        socket.on('skip', function() {
+            audioPlayer.pause();
+            loadNextSong();
+        });
+        
+        socket.on('pause', function() {
+            audioPlayer.pause();
+        });
+        
+        socket.on('resume', function() {
+            audioPlayer.play();
+        });
+        
+        socket.on('volume_changed', function(data) {
+            audioPlayer.volume = data.volume / 100;
+            document.getElementById('volume-slider').value = data.volume;
+            document.getElementById('volume-display').textContent = data.volume + '%';
+        });
+        
+        socket.on('song_ready', function(data) {
+            addStatusMessage(`✅ เพลงพร้อมเล่น: ${data.title}`);
+            // ถ้าเพลงที่ ready คือ current_song และ is_playing
+            fetch('/status')
+                .then(response => response.json())
+                .then(status => {
+                    if (
+                        status.current_song &&
+                        status.current_song.id === data.id &&
+                        status.is_playing &&
+                        !status.is_paused
+                    ) {
+                        // อัปเดต src และเล่นเพลงทันที
+                        audioPlayer.src = `/audio/${data.id}`;
+                        audioPlayer.load();
+                        audioPlayer.play().catch(function(err) {
+                            addStatusMessage('⚠️ ไม่สามารถเล่นเพลงอัตโนมัติได้ กรุณาคลิกที่ player หรือปุ่ม ▶️ เพื่อเริ่มเล่นเพลง');
+                        });
+                        currentSongId = data.id;
+                    }
+                });
+        });
+        
+        socket.on('download_error', function(data) {
+            addStatusMessage(`❌ ไม่สามารถดาวน์โหลดเพลงได้: ${data.error}`);
+        });
+        
+        // Audio player events
+        audioPlayer.addEventListener('ended', function() {
+            // แจ้ง backend ว่าเพลงจบแล้ว
+            fetch('/song_ended', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.song) {
+                        addStatusMessage(`🎵 เล่นเพลงต่อไป: ${data.song.title}`);
+                    } else {
+                        addStatusMessage('📭 หมดเพลงในคิวแล้ว');
+                        // ล้าง src เพื่อป้องกันการวนซ้ำ
+                        audioPlayer.src = '';
+                        currentSongId = null;
+                    }
+                });
+        });
+        
+        audioPlayer.addEventListener('error', function() {
+            addStatusMessage('❌ เกิดข้อผิดพลาดในการเล่นเพลง');
+            loadNextSong();
+        });
+        
+        // Functions
+        function updateStatus(data) {
+            // Update current song display
+            const nowPlaying = document.getElementById('now-playing');
+            if (data.current_song) {
+                nowPlaying.innerHTML = `<strong>${data.current_song.title}</strong>`;
+                
+                // Load audio if different song
+                if (currentSongId !== data.current_song.id) {
+                    currentSongId = data.current_song.id;
+                    if (data.current_song.file_path) {
+                        audioPlayer.src = `/audio/${data.current_song.id}`;
+                        audioPlayer.load();
+                        if (data.is_playing && !data.is_paused) {
+                            // Try to autoplay
+                            audioPlayer.play().catch(function(err) {
+                                addStatusMessage('⚠️ ไม่สามารถเล่นเพลงอัตโนมัติได้ กรุณาคลิกที่ player หรือปุ่ม ▶️ เพื่อเริ่มเล่นเพลง');
+                            });
+                        }
+                    }
+                } else {
+                    // ถ้าเพลงเดิมแต่สถานะเปลี่ยนเป็นเล่น ให้พยายามเล่น
+                    if (data.is_playing && !data.is_paused && audioPlayer.paused) {
+                        audioPlayer.play().catch(function(err) {
+                            addStatusMessage('⚠️ ไม่สามารถเล่นเพลงอัตโนมัติได้ กรุณาคลิกที่ player หรือปุ่ม ▶️ เพื่อเริ่มเล่นเพลง');
+                        });
+                    }
+                }
+            } else {
+                nowPlaying.textContent = 'ไม่มีเพลงที่กำลังเล่น';
+                audioPlayer.src = '';
+                currentSongId = null;
+            }
+            
+            // Update queue display
+            const queueList = document.getElementById('queue-list');
+            if (data.queue && data.queue.length > 0) {
+                let queueHtml = '<ol>';
+                data.queue.forEach(function(song) {
+                    queueHtml += `<li>${song.title}</li>`;
+                });
+                queueHtml += '</ol>';
+                queueList.innerHTML = queueHtml;
+            } else {
+                queueList.textContent = 'ไม่มีเพลงในคิว';
+            }
+            
+            // Update volume
+            if (data.volume !== undefined) {
+                audioPlayer.volume = data.volume / 100;
+                document.getElementById('volume-slider').value = data.volume;
+                document.getElementById('volume-display').textContent = data.volume + '%';
+            }
+        }
+        
+        function addSong() {
+            const urlInput = document.getElementById('youtube-url');
+            const url = urlInput.value.trim();
+            
+            if (!url) {
+                alert('กรุณาใส่ YouTube URL');
+                return;
+            }
+            
+            addStatusMessage(`⏳ กำลังประมวลผล: ${url}`);
+            
+            fetch('/api/add_song', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ url: url })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    addStatusMessage(`✅ เพิ่มเพลงเข้าคิวแล้ว: ${data.title}`);
+                    urlInput.value = '';
+                } else {
+                    addStatusMessage(`❌ เกิดข้อผิดพลาด: ${data.error}`);
+                }
+            })
+            .catch(error => {
+                addStatusMessage(`❌ เกิดข้อผิดพลาด: ${error.message}`);
+            });
+        }
+        
+        function skipSong() {
+            fetch('/skip', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        addStatusMessage('⏭️ ข้ามเพลงแล้ว');
+                    }
+                });
+        }
+        
+        function pauseSong() {
+            fetch('/pause', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        addStatusMessage('⏸️ หยุดเพลงชั่วคราว');
+                    }
+                });
+        }
+        
+        function resumeSong() {
+            fetch('/resume', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        addStatusMessage('▶️ เล่นเพลงต่อ');
+                    }
+                });
+        }
+        
+        function setVolume(value) {
+            fetch('/volume', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ volume: parseInt(value) })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('volume-display').textContent = value + '%';
+                    addStatusMessage(`🔊 ปรับระดับเสียงเป็น ${value}%`);
+                }
+            });
+        }
+        
+        function loadNextSong() {
+            fetch('/next_song')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        addStatusMessage(`🎵 เล่นเพลงต่อไป: ${data.song.title}`);
+                    } else {
+                        addStatusMessage('📭 หมดเพลงในคิวแล้ว');
+                    }
+                });
+        }
+        
+        function addStatusMessage(message) {
+            const statusMessages = document.getElementById('status-messages');
+            const timestamp = new Date().toLocaleString('th-TH');
+            const messageDiv = document.createElement('div');
+            messageDiv.innerHTML = `<small>${timestamp}</small> - ${message}`;
+            statusMessages.appendChild(messageDiv);
+            statusMessages.scrollTop = statusMessages.scrollHeight;
+        }
+        
+        // Handle Enter key in URL input
+        document.getElementById('youtube-url').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                addSong();
+            }
+        });
+        
+        // Load initial status
+        fetch('/status')
+            .then(response => response.json())
+            .then(data => updateStatus(data));
+        
+        // Overlay interaction unlock autoplay
+        document.getElementById('start-btn').addEventListener('click', function() {
+            document.getElementById('interaction-overlay').style.display = 'none';
+            // Unlock autoplay by playing muted
+            audioPlayer.muted = true;
+            audioPlayer.play().catch(()=>{}).finally(()=>{
+                audioPlayer.muted = false;
+            });
+        });
+    </script>
+</body>
+</html>
